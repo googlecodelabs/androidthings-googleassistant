@@ -42,6 +42,7 @@ import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseRequest;
 import com.google.assistant.embedded.v1alpha1.ConverseResponse;
+import com.google.assistant.embedded.v1alpha1.ConverseState;
 import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
 import com.google.protobuf.ByteString;
 
@@ -123,6 +124,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                         mAudioTrack.setVolume(mAudioTrack.getMaxVolume() *
                             mVolumePercentage / 100.0f);
                     }
+                    mConversationState = value.getResult().getConversationState();
                     if (!spokenRequestText.isEmpty()) {
                         Log.i(TAG, "assistant request text: " + spokenRequestText);
                         mMainHandler.post(new Runnable() {
@@ -180,6 +182,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Gpio mLed;
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
+    private ByteString mConversationState = null;
     private HandlerThread mAssistantThread;
     private Handler mAssistantHandler;
     private Runnable mStartAssistantRequest = new Runnable() {
@@ -188,11 +191,18 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             Log.i(TAG, "starting assistant request");
             mAudioRecord.startRecording();
             mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
-            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder().setConfig(
-                    ConverseConfig.newBuilder()
-                            .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
-                            .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG)
-                            .build()).build());
+            ConverseConfig.Builder converseConfigBuilder = ConverseConfig.newBuilder()
+                    .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
+                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
+            if (mConversationState != null) {
+                converseConfigBuilder.setConverseState(ConverseState.newBuilder()
+                        .setConversationState(mConversationState)
+                        .build());
+            }
+            mAssistantRequestObserver.onNext(
+                ConverseRequest.newBuilder()
+                    .setConfig(converseConfigBuilder.build())
+                    .build());
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
