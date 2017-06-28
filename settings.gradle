@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-include ':base_assistant', ':shared', ':volume_control'
+include ':base_assistant', ':shared', ':volume_control', ':conversational_agents'
