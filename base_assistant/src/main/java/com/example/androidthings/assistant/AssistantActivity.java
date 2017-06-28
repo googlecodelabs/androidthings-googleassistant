@@ -30,6 +30,10 @@ import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import com.example.androidthings.assistant.shared.BoardDefaults;
+import com.example.androidthings.assistant.shared.Credentials;
+import com.example.androidthings.assistant.shared.VoiceHatDriver;
+
 import com.google.android.things.contrib.driver.button.Button;
 import com.google.android.things.pio.Gpio;
 

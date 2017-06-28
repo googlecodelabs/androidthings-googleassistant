@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.androidthings.assistant;
+package com.example.androidthings.assistant.shared;
 
 import android.content.Context;
 
@@ -26,8 +26,8 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 
-class Credentials {
-    static UserCredentials fromResource(Context context, int resourceId)
+public class Credentials {
+    public static UserCredentials fromResource(Context context, int resourceId)
             throws IOException, JSONException {
         InputStream is = context.getResources().openRawResource(resourceId);
         byte[] bytes = new byte[is.available()];
