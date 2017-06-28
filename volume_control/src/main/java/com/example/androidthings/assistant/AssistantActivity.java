@@ -67,6 +67,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // Audio constants.
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
+    private static int mVolumePercentage = 100;
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
     private static final AudioInConfig ASSISTANT_AUDIO_REQUEST_CONFIG =
@@ -78,6 +79,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             AudioOutConfig.newBuilder()
                     .setEncoding(ENCODING_OUTPUT)
                     .setSampleRateHertz(SAMPLE_RATE)
+                    .setVolumePercentage(mVolumePercentage)
                     .build();
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
@@ -115,6 +117,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     break;
                 case RESULT:
                     final String spokenRequestText = value.getResult().getSpokenRequestText();
+                    if (value.getResult().getVolumePercentage() != 0) {
+                        mVolumePercentage = value.getResult().getVolumePercentage();
+                        Log.i(TAG, "assistant volume changed: " + mVolumePercentage);
+                        mAudioTrack.setVolume(mAudioTrack.getMaxVolume() *
+                            mVolumePercentage / 100.0f);
+                    }
                     if (!spokenRequestText.isEmpty()) {
                         Log.i(TAG, "assistant request text: " + spokenRequestText);
                         mMainHandler.post(new Runnable() {
