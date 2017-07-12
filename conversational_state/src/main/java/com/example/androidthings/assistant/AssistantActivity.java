@@ -67,21 +67,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
     // Audio constants.
     private static final int SAMPLE_RATE = 16000;
+    private static final int DEFAULT_VOLUME = 100;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
-    private static int mVolumePercentage = 100;
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
-    private static final AudioInConfig ASSISTANT_AUDIO_REQUEST_CONFIG =
-            AudioInConfig.newBuilder()
-                         .setEncoding(ENCODING_INPUT)
-                         .setSampleRateHertz(SAMPLE_RATE)
-                         .build();
-    private static final AudioOutConfig ASSISTANT_AUDIO_RESPONSE_CONFIG =
-            AudioOutConfig.newBuilder()
-                    .setEncoding(ENCODING_OUTPUT)
-                    .setSampleRateHertz(SAMPLE_RATE)
-                    .setVolumePercentage(mVolumePercentage)
-                    .build();
+
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
             .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
@@ -175,6 +165,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // Audio playback and recording objects.
     private AudioTrack mAudioTrack;
     private AudioRecord mAudioRecord;
+    private int mVolumePercentage = DEFAULT_VOLUME;
 
     // Hardware peripherals.
     private VoiceHatDriver mVoiceHat;
@@ -192,8 +183,15 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAudioRecord.startRecording();
             mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
             ConverseConfig.Builder converseConfigBuilder = ConverseConfig.newBuilder()
-                    .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
-                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
+                    .setAudioInConfig(AudioInConfig.newBuilder()
+                            .setEncoding(ENCODING_INPUT)
+                            .setSampleRateHertz(SAMPLE_RATE)
+                            .build())
+                    .setAudioOutConfig(AudioOutConfig.newBuilder()
+                            .setEncoding(ENCODING_OUTPUT)
+                            .setSampleRateHertz(SAMPLE_RATE)
+                            .setVolumePercentage(mVolumePercentage)
+                            .build());
             if (mConversationState != null) {
                 converseConfigBuilder.setConverseState(ConverseState.newBuilder()
                         .setConversationState(mConversationState)
