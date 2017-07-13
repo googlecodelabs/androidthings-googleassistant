@@ -181,11 +181,13 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             Log.i(TAG, "starting assistant request");
             mAudioRecord.startRecording();
             mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
-            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder().setConfig(
-                    ConverseConfig.newBuilder()
-                            .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
-                            .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG)
-                            .build()).build());
+            ConverseConfig.Builder converseConfigBuilder = ConverseConfig.newBuilder()
+                    .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
+                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
+            mAssistantRequestObserver.onNext(
+                    ConverseRequest.newBuilder()
+                            .setConfig(converseConfigBuilder.build())
+                            .build());
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
