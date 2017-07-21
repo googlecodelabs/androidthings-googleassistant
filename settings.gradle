@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-include ':base_assistant', ':shared', ':volume_control', ':conversational_state'
+include ':step1-start-here', ':step2-volume-control', ':step3-conversational-state', ':shared'
