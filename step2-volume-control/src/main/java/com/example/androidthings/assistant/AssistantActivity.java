@@ -32,8 +32,8 @@ import android.widget.ListView;
 
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
-import com.example.androidthings.assistant.shared.VoiceHatDriver;
 import com.google.android.things.contrib.driver.button.Button;
+import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
 
 import com.google.android.things.pio.PeripheralManagerService;
@@ -42,7 +42,6 @@ import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseRequest;
 import com.google.assistant.embedded.v1alpha1.ConverseResponse;
-import com.google.assistant.embedded.v1alpha1.ConverseState;
 import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
 import com.google.protobuf.ByteString;
 
@@ -176,7 +175,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private AudioRecord mAudioRecord;
 
     // Hardware peripherals.
-    private VoiceHatDriver mVoiceHat;
+    private VoiceHat mVoiceHat;
     private Button mButton;
     private Gpio mLed;
 
@@ -259,7 +258,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 if (i2sDevices.size() > 0) {
                     try {
                         Log.i(TAG, "creating voice hat driver");
-                        mVoiceHat = new VoiceHatDriver(
+                        mVoiceHat = new VoiceHat(
                                 BoardDefaults.getI2SDeviceForVoiceHat(),
                                 BoardDefaults.getGPIOForVoiceHatTrigger(),
                                 AUDIO_FORMAT_STEREO
