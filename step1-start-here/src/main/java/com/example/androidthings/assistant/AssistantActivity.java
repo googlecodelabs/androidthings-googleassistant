@@ -24,14 +24,12 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder.AudioSource;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
-
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
 import com.google.android.things.contrib.driver.button.Button;
@@ -39,24 +37,22 @@ import com.google.android.things.contrib.driver.voicehat.Max98357A;
 import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
-import com.google.assistant.embedded.v1alpha1.AudioInConfig;
-import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
-import com.google.assistant.embedded.v1alpha1.ConverseConfig;
-import com.google.assistant.embedded.v1alpha1.ConverseRequest;
-import com.google.assistant.embedded.v1alpha1.ConverseResponse;
-import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
+import com.google.assistant.embedded.v1alpha2.AssistConfig;
+import com.google.assistant.embedded.v1alpha2.AssistRequest;
+import com.google.assistant.embedded.v1alpha2.AssistResponse;
+import com.google.assistant.embedded.v1alpha2.AudioInConfig;
+import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
+import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
+import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
 import com.google.protobuf.ByteString;
-
-import org.json.JSONException;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.stub.StreamObserver;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import org.json.JSONException;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
     private static final String TAG = AssistantActivity.class.getSimpleName();
@@ -106,38 +102,35 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
     // gRPC client and stream observers.
     private EmbeddedAssistantGrpc.EmbeddedAssistantStub mAssistantService;
-    private StreamObserver<ConverseRequest> mAssistantRequestObserver;
-    private StreamObserver<ConverseResponse> mAssistantResponseObserver =
-            new StreamObserver<ConverseResponse>() {
+    private StreamObserver<AssistRequest> mAssistantRequestObserver;
+    private StreamObserver<AssistResponse> mAssistantResponseObserver =
+            new StreamObserver<AssistResponse>() {
         @Override
-        public void onNext(ConverseResponse value) {
-            switch (value.getConverseResponseCase()) {
-                case EVENT_TYPE:
-                    Log.d(TAG, "converse response event: " + value.getEventType());
-                    break;
-                case RESULT:
-                    final String spokenRequestText = value.getResult().getSpokenRequestText();
+        public void onNext(AssistResponse value) {
+            if (value.getEventType() != null) {
+                Log.d(TAG, "converse response event: " + value.getEventType());
+            }
+            if (value.getSpeechResultsList() != null && value.getSpeechResultsList().size() > 0) {
+                for (SpeechRecognitionResult result : value.getSpeechResultsList()) {
+                    final String spokenRequestText = result.getTranscript();
                     if (!spokenRequestText.isEmpty()) {
                         Log.i(TAG, "assistant request text: " + spokenRequestText);
                         mMainHandler.post(() -> mAssistantRequestsAdapter.add(spokenRequestText));
                     }
-                    break;
-                case AUDIO_OUT:
-                    final ByteBuffer audioData =
-                            ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
-                    Log.d(TAG, "converse audio size: " + audioData.remaining());
-                    mAssistantResponses.add(audioData);
-                    if (mLed != null) {
-                        try {
-                            mLed.setValue(!mLed.getValue());
-                        } catch (IOException e) {
-                            Log.w(TAG, "error toggling LED:", e);
-                        }
+                }
+            }
+            if (value.getAudioOut() != null) {
+                final ByteBuffer audioData =
+                    ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
+                Log.d(TAG, "converse audio size: " + audioData.remaining());
+                mAssistantResponses.add(audioData);
+                if (mLed != null) {
+                    try {
+                        mLed.setValue(!mLed.getValue());
+                    } catch (IOException e) {
+                        Log.w(TAG, "error toggling LED:", e);
                     }
-                    break;
-                case ERROR:
-                    Log.e(TAG, "converse response error: " + value.getError());
-                    break;
+                }
             }
         }
 
@@ -213,12 +206,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         public void run() {
             Log.i(TAG, "starting assistant request");
             mAudioRecord.startRecording();
-            mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
-            ConverseConfig.Builder converseConfigBuilder = ConverseConfig.newBuilder()
+            mAssistantRequestObserver = mAssistantService.assist(mAssistantResponseObserver);
+            AssistConfig.Builder converseConfigBuilder = AssistConfig.newBuilder()
                     .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
                     .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
             mAssistantRequestObserver.onNext(
-                    ConverseRequest.newBuilder()
+                    AssistRequest.newBuilder()
                             .setConfig(converseConfigBuilder.build())
                             .build());
             mAssistantHandler.post(mStreamAssistantRequest);
@@ -238,7 +231,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 return;
             }
             Log.d(TAG, "streaming ConverseRequest: " + result);
-            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
+            mAssistantRequestObserver.onNext(AssistRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
             mAssistantHandler.post(mStreamAssistantRequest);
@@ -271,8 +264,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         setContentView(R.layout.activity_main);
         ListView assistantRequestsListView = findViewById(R.id.assistantRequestsListView);
         mAssistantRequestsAdapter =
-                new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
-                        mAssistantRequests);
+            new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
+                mAssistantRequests);
         assistantRequestsListView.setAdapter(mAssistantRequestsAdapter);
         mMainHandler = new Handler(getMainLooper());
 

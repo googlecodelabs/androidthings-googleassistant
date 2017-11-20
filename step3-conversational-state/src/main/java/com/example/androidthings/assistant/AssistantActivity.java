@@ -24,7 +24,6 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -38,13 +37,14 @@ import com.google.android.things.contrib.driver.voicehat.Max98357A;
 import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
-import com.google.assistant.embedded.v1alpha1.AudioInConfig;
-import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
-import com.google.assistant.embedded.v1alpha1.ConverseConfig;
-import com.google.assistant.embedded.v1alpha1.ConverseRequest;
-import com.google.assistant.embedded.v1alpha1.ConverseResponse;
-import com.google.assistant.embedded.v1alpha1.ConverseState;
-import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
+import com.google.assistant.embedded.v1alpha2.AssistConfig;
+import com.google.assistant.embedded.v1alpha2.AssistRequest;
+import com.google.assistant.embedded.v1alpha2.AssistResponse;
+import com.google.assistant.embedded.v1alpha2.AudioInConfig;
+import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
+import com.google.assistant.embedded.v1alpha2.DialogStateIn;
+import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
+import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -95,47 +95,62 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
     // gRPC client and stream observers.
     private EmbeddedAssistantGrpc.EmbeddedAssistantStub mAssistantService;
-    private StreamObserver<ConverseRequest> mAssistantRequestObserver;
-    private StreamObserver<ConverseResponse> mAssistantResponseObserver =
-            new StreamObserver<ConverseResponse>() {
-        @Override
-        public void onNext(ConverseResponse value) {
-            switch (value.getConverseResponseCase()) {
-                case EVENT_TYPE:
-                    Log.d(TAG, "converse response event: " + value.getEventType());
-                    break;
-                case RESULT:
-                    final String spokenRequestText = value.getResult().getSpokenRequestText();
-                    if (value.getResult().getVolumePercentage() != 0) {
-                        mVolumePercentage = value.getResult().getVolumePercentage();
-                        Log.i(TAG, "assistant volume changed: " + mVolumePercentage);
-                        mAudioTrack.setVolume(AudioTrack.getMaxVolume() *
-                            mVolumePercentage / 100.0f);
+    private StreamObserver<AssistRequest> mAssistantRequestObserver;
+    private StreamObserver<AssistResponse> mAssistantResponseObserver =
+            new StreamObserver<AssistResponse>() {
+                @Override
+                public void onNext(AssistResponse value) {
+                    if (value.getEventType() != null) {
+                        Log.d(TAG, "converse response event: " + value.getEventType());
                     }
-                    mConversationState = value.getResult().getConversationState();
-                    if (!spokenRequestText.isEmpty()) {
-                        Log.i(TAG, "assistant request text: " + spokenRequestText);
-                        mMainHandler.post(() -> mAssistantRequestsAdapter.add(spokenRequestText));
-                    }
-                    break;
-                case AUDIO_OUT:
-                    final ByteBuffer audioData =
-                            ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
-                    Log.d(TAG, "converse audio size: " + audioData.remaining());
-                    mAssistantResponses.add(audioData);
-                    if (mLed != null) {
-                        try {
-                            mLed.setValue(!mLed.getValue());
-                        } catch (IOException e) {
-                            Log.w(TAG, "error toggling LED:", e);
+                    if (value.getSpeechResultsList() != null && value.getSpeechResultsList().size() > 0) {
+                        for (SpeechRecognitionResult result : value.getSpeechResultsList()) {
+                            final String spokenRequestText = result.getTranscript();
+                            if (!spokenRequestText.isEmpty()) {
+                                Log.i(TAG, "assistant request text: " + spokenRequestText);
+                                mMainHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mAssistantRequestsAdapter.add(spokenRequestText);
+                                    }
+                                });
+                            }
                         }
                     }
-                    break;
-                case ERROR:
-                    Log.e(TAG, "converse response error: " + value.getError());
-                    break;
-            }
-        }
+                    if (value.getDialogStateOut() != null) {
+                        int volume = value.getDialogStateOut().getVolumePercentage();
+                        if (volume > 0) {
+                            mVolumePercentage = volume;
+                            Log.i(TAG, "assistant volume changed: " + mVolumePercentage);
+                            mAudioTrack.setVolume(AudioTrack.getMaxVolume() *
+                                mVolumePercentage / 100.0f);
+                        }
+                        mConversationState = value.getDialogStateOut().getConversationState();
+                    }
+                    if (value.getAudioOut() != null) {
+                        final ByteBuffer audioData =
+                            ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
+
+                        Log.d(TAG, "converse audio size: " + audioData.remaining());
+
+                        if (mLed != null) {
+                            try {
+                                mLed.setValue(!mLed.getValue());
+                            } catch (IOException e) {
+                                Log.w(TAG, "error toggling LED:", e);
+                            }
+                            Log.d(TAG, "converse audio size: " + audioData.remaining());
+                            mAssistantResponses.add(audioData);
+                            if (mLed != null) {
+                                try {
+                                    mLed.setValue(!mLed.getValue());
+                                } catch (IOException e) {
+                                    Log.w(TAG, "error toggling LED:", e);
+                                }
+                            }
+                        }
+                    }
+                }
 
         @Override
         public void onError(Throwable t) {
@@ -210,8 +225,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         public void run() {
             Log.i(TAG, "starting assistant request");
             mAudioRecord.startRecording();
-            mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
-            ConverseConfig.Builder converseConfigBuilder = ConverseConfig.newBuilder()
+            mAssistantRequestObserver = mAssistantService.assist(mAssistantResponseObserver);
+            AssistConfig.Builder converseConfigBuilder = AssistConfig.newBuilder()
                     .setAudioInConfig(AudioInConfig.newBuilder()
                             .setEncoding(ENCODING_INPUT)
                             .setSampleRateHertz(SAMPLE_RATE)
@@ -222,12 +237,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                             .setVolumePercentage(mVolumePercentage)
                             .build());
             if (mConversationState != null) {
-                converseConfigBuilder.setConverseState(ConverseState.newBuilder()
+                converseConfigBuilder.setDialogStateIn(DialogStateIn.newBuilder()
                         .setConversationState(mConversationState)
                         .build());
             }
             mAssistantRequestObserver.onNext(
-                ConverseRequest.newBuilder()
+                AssistRequest.newBuilder()
                     .setConfig(converseConfigBuilder.build())
                     .build());
             mAssistantHandler.post(mStreamAssistantRequest);
@@ -247,7 +262,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 return;
             }
             Log.d(TAG, "streaming ConverseRequest: " + result);
-            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
+            mAssistantRequestObserver.onNext(AssistRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
             mAssistantHandler.post(mStreamAssistantRequest);
