@@ -18,17 +18,14 @@ apply plugin: 'com.android.library'
 apply plugin: 'com.google.protobuf'
 
 android {
-    compileSdkVersion 26
-    buildToolsVersion "26.0.0"
+    compileSdkVersion 27
+    buildToolsVersion "27.0.0"
 
     defaultConfig {
-        minSdkVersion 24
-        targetSdkVersion 26
+        minSdkVersion 27
+        targetSdkVersion 27
         versionCode 1
         versionName "1.0"
-
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-
     }
     buildTypes {
         release {
@@ -64,18 +61,18 @@ protobuf {
 }
 
 dependencies {
-    provided 'com.google.android.things:androidthings:0.5-devpreview'
-    compile 'com.google.android.things.contrib:driver-button:0.4'
-    compile 'com.google.android.things.contrib:driver-voicehat:0.2'
+    compileOnly 'com.google.android.things:androidthings:0.6-devpreview'
+    implementation 'com.google.android.things.contrib:driver-button:0.4'
+    implementation 'com.google.android.things.contrib:driver-voicehat:0.2'
 
-    compile 'io.grpc:grpc-okhttp:1.2.0'
-    compile 'io.grpc:grpc-protobuf-lite:1.2.0'
-    compile 'io.grpc:grpc-stub:1.2.0'
-    compile 'io.grpc:grpc-auth:1.2.0'
+    implementation 'io.grpc:grpc-okhttp:1.2.0'
+    implementation 'io.grpc:grpc-protobuf-lite:1.2.0'
+    implementation 'io.grpc:grpc-stub:1.2.0'
+    implementation 'io.grpc:grpc-auth:1.2.0'
 
-    compile 'javax.annotation:javax.annotation-api:1.2'
+    implementation 'javax.annotation:javax.annotation-api:1.2'
 
-    compile('com.google.auth:google-auth-library-oauth2-http:0.6.0') {
+    implementation('com.google.auth:google-auth-library-oauth2-http:0.6.0') {
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
 }
