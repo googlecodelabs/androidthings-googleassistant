@@ -18,15 +18,12 @@ package com.example.androidthings.assistant.shared;
 
 import android.os.Build;
 
-import com.google.android.things.pio.PeripheralManagerService;
-
-import java.util.List;
-
 @SuppressWarnings("WeakerAccess")
 public class BoardDefaults {
-    private static final String DEVICE_RPI3 = "rpi3";
+    public static final String DEVICE_RPI3 = "rpi3";
     private static final String DEVICE_IMX6UL_PICO = "imx6ul_pico";
     private static final String DEVICE_IMX7D_PICO = "imx7d_pico";
+
     /**
      * Return the GPIO pin that the LED is connected on.
      * For example, on Intel Edison Arduino breakout, pin "IO13" is connected to an onboard LED
@@ -44,6 +41,7 @@ public class BoardDefaults {
                 throw new IllegalStateException("Unknown Build.DEVICE " + Build.DEVICE);
         }
     }
+
     /**
      * Return the GPIO pin that the Button is connected on.
      */
@@ -59,21 +57,11 @@ public class BoardDefaults {
                 throw new IllegalStateException("Unknown Build.DEVICE " + Build.DEVICE);
         }
     }
-    /**
-     * Return the I2S Bus that the Voice Hat is connected to.
-     */
-    public static String getI2SDeviceForVoiceHat() {
-        switch (Build.DEVICE) {
-            case DEVICE_RPI3:
-                return "I2S1";
-            default:
-                throw new IllegalStateException("Unknown Build.DEVICE " + Build.DEVICE);
-        }
-    }
+
     /**
      * Return the GPIO pin for the Voice Hat DAC trigger.
      */
-    public static String getGPIOForVoiceHatTrigger() {
+    public static String getGPIOForDacTrigger() {
         switch (Build.DEVICE) {
             case DEVICE_RPI3:
                 return "BCM16";

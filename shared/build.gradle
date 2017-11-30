@@ -63,7 +63,6 @@ protobuf {
 dependencies {
     compileOnly 'com.google.android.things:androidthings:0.6-devpreview'
     implementation 'com.google.android.things.contrib:driver-button:0.4'
-    implementation 'com.google.android.things.contrib:driver-voicehat:0.2'
 
     implementation 'io.grpc:grpc-okhttp:1.2.0'
     implementation 'io.grpc:grpc-protobuf-lite:1.2.0'

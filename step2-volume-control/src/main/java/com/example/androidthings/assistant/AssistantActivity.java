@@ -18,24 +18,23 @@ package com.example.androidthings.assistant;
 
 import android.app.Activity;
 import android.content.Context;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.MediaRecorder;
+import android.media.MediaRecorder.AudioSource;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
-
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
 import com.google.android.things.contrib.driver.button.Button;
-import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
-
 import com.google.android.things.pio.PeripheralManagerService;
 import com.google.assistant.embedded.v1alpha1.AudioInConfig;
 import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
@@ -44,24 +43,20 @@ import com.google.assistant.embedded.v1alpha1.ConverseRequest;
 import com.google.assistant.embedded.v1alpha1.ConverseResponse;
 import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
 import com.google.protobuf.ByteString;
-
-import org.json.JSONException;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.stub.StreamObserver;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import org.json.JSONException;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
     private static final String TAG = AssistantActivity.class.getSimpleName();
 
     // Peripheral and drivers constants.
-    private static final boolean AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE = true;
+    private static final boolean USE_VOICEHAT_DAC = true;
     private static final int BUTTON_DEBOUNCE_DELAY_MS = 20;
 
     // Audio constants.
@@ -100,6 +95,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             .setSampleRate(SAMPLE_RATE)
             .build();
     private static final int SAMPLE_BLOCK_SIZE = 1024;
+    private int mOutputBufferSize;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
@@ -120,24 +116,19 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     if (value.getResult().getVolumePercentage() != 0) {
                         mVolumePercentage = value.getResult().getVolumePercentage();
                         Log.i(TAG, "assistant volume changed: " + mVolumePercentage);
-                        mAudioTrack.setVolume(mAudioTrack.getMaxVolume() *
+                        mAudioTrack.setVolume(AudioTrack.getMaxVolume() *
                             mVolumePercentage / 100.0f);
                     }
                     if (!spokenRequestText.isEmpty()) {
                         Log.i(TAG, "assistant request text: " + spokenRequestText);
-                        mMainHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                mAssistantRequestsAdapter.add(spokenRequestText);
-                            }
-                        });
+                        mMainHandler.post(() -> mAssistantRequestsAdapter.add(spokenRequestText));
                     }
                     break;
                 case AUDIO_OUT:
                     final ByteBuffer audioData =
                             ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
                     Log.d(TAG, "converse audio size: " + audioData.remaining());
-                    mAudioTrack.write(audioData, audioData.remaining(), AudioTrack.WRITE_BLOCKING);
+                    mAssistantResponses.add(audioData);
                     if (mLed != null) {
                         try {
                             mLed.setValue(!mLed.getValue());
@@ -159,6 +150,37 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
         @Override
         public void onCompleted() {
+            mAudioTrack = new AudioTrack.Builder()
+                .setAudioFormat(AUDIO_FORMAT_OUT_MONO)
+                .setBufferSizeInBytes(mOutputBufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build();
+            if (mAudioOutputDevice != null) {
+                mAudioTrack.setPreferredDevice(mAudioOutputDevice);
+            }
+            mAudioTrack.play();
+            if (mDacTrigger != null) {
+                try {
+                    mDacTrigger.setValue(true);
+                } catch (IOException e) {
+                    Log.e(TAG, "unable to modify dac trigger", e);
+                }
+            }
+            for (ByteBuffer audioData : mAssistantResponses) {
+                final ByteBuffer buf = audioData;
+                Log.d(TAG, "Playing a bit of audio");
+                mAudioTrack.write(buf, buf.remaining(),
+                    AudioTrack.WRITE_BLOCKING);
+            }
+            mAssistantResponses.clear();
+            mAudioTrack.stop();
+            if (mDacTrigger != null) {
+                try {
+                    mDacTrigger.setValue(false);
+                } catch (IOException e) {
+                    Log.e(TAG, "unable to modify gpio peripherals", e);
+                }
+            }
             Log.i(TAG, "assistant response finished");
             if (mLed != null) {
                 try {
@@ -174,14 +196,19 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private AudioTrack mAudioTrack;
     private AudioRecord mAudioRecord;
 
+    // Audio routing configuration: use default routing.
+    private AudioDeviceInfo mAudioInputDevice;
+    private AudioDeviceInfo mAudioOutputDevice;
+
     // Hardware peripherals.
-    private VoiceHat mVoiceHat;
     private Button mButton;
     private Gpio mLed;
+    private Gpio mDacTrigger;
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
     private HandlerThread mAssistantThread;
     private Handler mAssistantHandler;
+    private ArrayList<ByteBuffer> mAssistantResponses = new ArrayList<>();
     private Runnable mStartAssistantRequest = new Runnable() {
         @Override
         public void run() {
@@ -202,6 +229,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         @Override
         public void run() {
             ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
+            if (mAudioInputDevice != null) {
+                mAudioRecord.setPreferredDevice(mAudioInputDevice);
+            }
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
@@ -240,9 +270,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         Log.i(TAG, "starting assistant demo");
 
         setContentView(R.layout.activity_main);
-        ListView assistantRequestsListView = (ListView)findViewById(R.id.assistantRequestsListView);
+        ListView assistantRequestsListView = findViewById(R.id.assistantRequestsListView);
         mAssistantRequestsAdapter =
-                new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
+                new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
                         mAssistantRequests);
         assistantRequestsListView.setAdapter(mAssistantRequestsAdapter);
         mMainHandler = new Handler(getMainLooper());
@@ -251,31 +281,37 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         mAssistantThread.start();
         mAssistantHandler = new Handler(mAssistantThread.getLooper());
 
-        try {
-            if (AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE) {
-                PeripheralManagerService pioService = new PeripheralManagerService();
-                List<String> i2sDevices = pioService.getI2sDeviceList();
-                if (i2sDevices.size() > 0) {
-                    try {
-                        Log.i(TAG, "creating voice hat driver");
-                        mVoiceHat = new VoiceHat(
-                                BoardDefaults.getI2SDeviceForVoiceHat(),
-                                BoardDefaults.getGPIOForVoiceHatTrigger(),
-                                AUDIO_FORMAT_STEREO
-                        );
-                        mVoiceHat.registerAudioInputDriver();
-                        mVoiceHat.registerAudioOutputDriver();
-                    } catch (IllegalStateException e) {
-                        Log.w(TAG, "Unsupported board, falling back on default audio device:", e);
-                    }
-                }
+        // Use I2S with the Voice HAT.
+        if (USE_VOICEHAT_DAC) {
+            Log.d(TAG, "enumerating devices");
+            mAudioInputDevice = findAudioDevice(AudioManager.GET_DEVICES_INPUTS,
+                    AudioDeviceInfo.TYPE_BUS);
+            if (mAudioInputDevice == null) {
+                Log.e(TAG, "failed to found preferred audio input device, using default");
             }
-            mButton = new Button(BoardDefaults.getGPIOForButton(), Button.LogicState.PRESSED_WHEN_LOW);
+            mAudioOutputDevice = findAudioDevice(AudioManager.GET_DEVICES_OUTPUTS,
+                    AudioDeviceInfo.TYPE_BUS);
+            if (mAudioOutputDevice == null) {
+                Log.e(TAG, "failed to found preferred audio output device, using default");
+            }
+        }
+
+        try {
+            PeripheralManagerService pioService = new PeripheralManagerService();
+            if (USE_VOICEHAT_DAC) {
+                Log.i(TAG, "initializing DAC trigger");
+                mDacTrigger = pioService.openGpio(BoardDefaults.getGPIOForDacTrigger());
+                mDacTrigger.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            }
+
+            mButton = new Button(BoardDefaults.getGPIOForButton(),
+                Button.LogicState.PRESSED_WHEN_LOW);
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);
             mButton.setOnButtonEventListener(this);
-            PeripheralManagerService pioService = new PeripheralManagerService();
+
             mLed = pioService.openGpio(BoardDefaults.getGPIOForLED());
             mLed.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            mLed.setActiveType(Gpio.ACTIVE_HIGH);
         } catch (IOException e) {
             Log.e(TAG, "error configuring peripherals:", e);
             return;
@@ -285,19 +321,19 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         int maxVolume = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         Log.i(TAG, "setting volume to: " + maxVolume);
         manager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
-        int outputBufferSize = AudioTrack.getMinBufferSize(AUDIO_FORMAT_OUT_MONO.getSampleRate(),
+        mOutputBufferSize = AudioTrack.getMinBufferSize(AUDIO_FORMAT_OUT_MONO.getSampleRate(),
                 AUDIO_FORMAT_OUT_MONO.getChannelMask(),
                 AUDIO_FORMAT_OUT_MONO.getEncoding());
         mAudioTrack = new AudioTrack.Builder()
                 .setAudioFormat(AUDIO_FORMAT_OUT_MONO)
-                .setBufferSizeInBytes(outputBufferSize)
+                .setBufferSizeInBytes(mOutputBufferSize)
                 .build();
         mAudioTrack.play();
         int inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_STEREO.getSampleRate(),
                 AUDIO_FORMAT_STEREO.getChannelMask(),
                 AUDIO_FORMAT_STEREO.getEncoding());
         mAudioRecord = new AudioRecord.Builder()
-                .setAudioSource(MediaRecorder.AudioSource.MIC)
+                .setAudioSource(AudioSource.VOICE_RECOGNITION)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
                 .setBufferSizeInBytes(inputBufferSize)
                 .build();
@@ -311,6 +347,17 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
+    }
+
+    private AudioDeviceInfo findAudioDevice(int deviceFlag, int deviceType) {
+        AudioManager manager = (AudioManager) this.getSystemService(Context.AUDIO_SERVICE);
+        AudioDeviceInfo[] adis = manager.getDevices(deviceFlag);
+        for (AudioDeviceInfo adi : adis) {
+            if (adi.getType() == deviceType) {
+                return adi;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -357,22 +404,15 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             mButton = null;
         }
-        if (mVoiceHat != null) {
+        if (mDacTrigger != null) {
             try {
-                mVoiceHat.unregisterAudioOutputDriver();
-                mVoiceHat.unregisterAudioInputDriver();
-                mVoiceHat.close();
+                mDacTrigger.close();
             } catch (IOException e) {
                 Log.w(TAG, "error closing voice hat driver", e);
             }
-            mVoiceHat = null;
+            mDacTrigger = null;
         }
-        mAssistantHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mAssistantHandler.removeCallbacks(mStreamAssistantRequest);
-            }
-        });
+        mAssistantHandler.post(() -> mAssistantHandler.removeCallbacks(mStreamAssistantRequest));
         mAssistantThread.quitSafely();
     }
 }
