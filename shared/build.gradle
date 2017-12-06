@@ -62,16 +62,17 @@ protobuf {
 
 dependencies {
     compileOnly 'com.google.android.things:androidthings:0.6-devpreview'
-    implementation 'com.google.android.things.contrib:driver-button:0.4'
+    api 'com.google.android.things.contrib:driver-button:0.4'
+    api 'com.google.android.things.contrib:driver-voicehat:0.4'
 
-    implementation 'io.grpc:grpc-okhttp:1.2.0'
-    implementation 'io.grpc:grpc-protobuf-lite:1.2.0'
-    implementation 'io.grpc:grpc-stub:1.2.0'
-    implementation 'io.grpc:grpc-auth:1.2.0'
+    api 'io.grpc:grpc-okhttp:1.2.0'
+    api 'io.grpc:grpc-protobuf-lite:1.2.0'
+    api 'io.grpc:grpc-stub:1.2.0'
+    api 'io.grpc:grpc-auth:1.2.0'
 
-    implementation 'javax.annotation:javax.annotation-api:1.2'
+    api 'javax.annotation:javax.annotation-api:1.2'
 
-    implementation('com.google.auth:google-auth-library-oauth2-http:0.6.0') {
+    api('com.google.auth:google-auth-library-oauth2-http:0.6.0') {
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
 }

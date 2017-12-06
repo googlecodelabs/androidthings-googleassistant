@@ -31,9 +31,12 @@ import android.os.HandlerThread;
 import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
 import com.google.android.things.contrib.driver.button.Button;
+import com.google.android.things.contrib.driver.voicehat.Max98357A;
+import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
 import com.google.assistant.embedded.v1alpha1.AudioInConfig;
@@ -43,14 +46,17 @@ import com.google.assistant.embedded.v1alpha1.ConverseRequest;
 import com.google.assistant.embedded.v1alpha1.ConverseResponse;
 import com.google.assistant.embedded.v1alpha1.EmbeddedAssistantGrpc;
 import com.google.protobuf.ByteString;
+
+import org.json.JSONException;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.stub.StreamObserver;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import org.json.JSONException;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
     private static final String TAG = AssistantActivity.class.getSimpleName();
@@ -151,9 +157,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mAudioTrack.setPreferredDevice(mAudioOutputDevice);
             }
             mAudioTrack.play();
-            if (mDacTrigger != null) {
+            if (mDac != null) {
                 try {
-                    mDacTrigger.setValue(true);
+                    mDac.setSdMode(Max98357A.SD_MODE_LEFT);
                 } catch (IOException e) {
                     Log.e(TAG, "unable to modify dac trigger", e);
                 }
@@ -166,9 +172,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             mAssistantResponses.clear();
             mAudioTrack.stop();
-            if (mDacTrigger != null) {
+            if (mDac != null) {
                 try {
-                    mDacTrigger.setValue(false);
+                    mDac.setSdMode(Max98357A.SD_MODE_SHUTDOWN);
                 } catch (IOException e) {
                     Log.e(TAG, "unable to modify dac trigger", e);
                 }
@@ -196,7 +202,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // Hardware peripherals.
     private Button mButton;
     private Gpio mLed;
-    private Gpio mDacTrigger;
+    private Max98357A mDac;
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
     private HandlerThread mAssistantThread;
@@ -290,19 +296,23 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         }
 
         try {
-            PeripheralManagerService pioService = new PeripheralManagerService();
             if (USE_VOICEHAT_DAC) {
                 Log.i(TAG, "initializing DAC trigger");
-                mDacTrigger = pioService.openGpio(BoardDefaults.getGPIOForDacTrigger());
-                mDacTrigger.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+                mDac = VoiceHat.openDac();
+                mDac.setSdMode(Max98357A.SD_MODE_SHUTDOWN);
+
+                mButton = VoiceHat.openButton();
+                mLed = VoiceHat.openLed();
+            } else {
+                PeripheralManagerService pioService = new PeripheralManagerService();
+                mButton = new Button(BoardDefaults.getGPIOForButton(),
+                    Button.LogicState.PRESSED_WHEN_LOW);
+                mLed = pioService.openGpio(BoardDefaults.getGPIOForLED());
             }
 
-            mButton = new Button(BoardDefaults.getGPIOForButton(),
-                Button.LogicState.PRESSED_WHEN_LOW);
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);
             mButton.setOnButtonEventListener(this);
 
-            mLed = pioService.openGpio(BoardDefaults.getGPIOForLED());
             mLed.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
             mLed.setActiveType(Gpio.ACTIVE_HIGH);
         } catch (IOException e) {
@@ -397,13 +407,13 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             mButton = null;
         }
-        if (mDacTrigger != null) {
+        if (mDac != null) {
             try {
-                mDacTrigger.close();
+                mDac.close();
             } catch (IOException e) {
                 Log.w(TAG, "error closing voice hat trigger", e);
             }
-            mDacTrigger = null;
+            mDac = null;
         }
         mAssistantHandler.post(() -> mAssistantHandler.removeCallbacks(mStreamAssistantRequest));
         mAssistantThread.quitSafely();

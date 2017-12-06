@@ -57,16 +57,4 @@ public class BoardDefaults {
                 throw new IllegalStateException("Unknown Build.DEVICE " + Build.DEVICE);
         }
     }
-
-    /**
-     * Return the GPIO pin for the Voice Hat DAC trigger.
-     */
-    public static String getGPIOForDacTrigger() {
-        switch (Build.DEVICE) {
-            case DEVICE_RPI3:
-                return "BCM16";
-            default:
-                throw new IllegalStateException("Unknown Build.DEVICE " + Build.DEVICE);
-        }
-    }
 }
