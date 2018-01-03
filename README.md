@@ -25,7 +25,7 @@ Run the sample
 ```
 pip install google-auth-oauthlib[tool]
 google-oauthlib-tool --client-secrets client_secret_NNNN.json \
-                     --credentials app/src/main/res/raw/credentials.json \
+                     --credentials shared/src/main/res/raw/credentials.json \
                      --scope https://www.googleapis.com/auth/assistant-sdk-prototype \
                      --save
 ```
