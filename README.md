@@ -13,7 +13,7 @@ Pre-requisites
 - If using [AIY Projects Voice Kit][voice-kit]:
     - Android Things Raspberry Pi Dev Preview 5 image from the [Android Things Console][dev-preview-download].
 - If using Android Things: supported [microphone][mic] and [speaker][speaker].
-    - set `AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE = false` in `AssistantActivity.java`
+    - set `USE_VOICEHAT_DAC = false` in `AssistantActivity.java`
 - [Google API Console Project][console].
 
 Run the sample
