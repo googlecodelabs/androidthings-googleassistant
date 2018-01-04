@@ -1,54 +1,12 @@
-Google Assistant API Sample for Android Things
-==============================================
+# Google Assistant API Sample for Android Things
 
-This sample shows how to call the Google Assistant API from Android Things.
+This codelab shows how to call the Google Assistant API from Android Things using gRPC. It records a spoken request from the connected microphones, sends it to the Google Assistant API and plays back the Assistant's spoken response on the connected speaker.
 
-It records a spoken request from the connected microphones, sends it to the Google Assistant API and plays back the Assistant's spoken response on the connected speaker.
+You can [get started](https://codelabs.developers.google.com/codelabs/androidthings-assistant/) with the codelab to learn how to set up and run the sample.
 
-Pre-requisites
---------------
+Alternatively, you can run [the full sample](https://github.com/androidthings/sample-googleassistant).
 
-- Android Studio 2.2+.
-- Android Things compatible board.
-- If using [AIY Projects Voice Kit][voice-kit]:
-    - Android Things Raspberry Pi Dev Preview 5 image from the [Android Things Console][dev-preview-download].
-- If using Android Things: supported [microphone][mic] and [speaker][speaker].
-    - set `AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE = false` in `AssistantActivity.java`
-- [Google API Console Project][console].
-
-Run the sample
---------------
-
-- Configure the Google API Console Project to use the [Google Assistant API][google-assistant-api-config].
-- Download the `client_secret_NNNN.json` file from the [credentials section of the Console][console-credentials].
-- Use the [`google-oauthlib-tool`][google-oauthlib-tool] to generate credentials:
-```
-pip install google-auth-oauthlib[tool]
-google-oauthlib-tool --client-secrets client_secret_NNNN.json \
-                     --credentials app/src/main/res/raw/credentials.json \
-                     --scope https://www.googleapis.com/auth/assistant-sdk-prototype \
-                     --save
-```
-- Make sure to set the [Activity Controls][set-activity-controls] for the Google Account using the application.
-- On the first install, grant the sample required permissions for audio and internet access:
-```bash
-./gradlew assembleDebug
-adb install -g app/build/outputs/apk/app-debug.apk
-```
-- On Android Studio, click on the "Run" button or on the command line, type:
-```bash
-./gradlew installDebug
-adb shell am start com.example.androidthings.assistant/.AssistantActivity
-```
-- Try the assistant demo:
-
-  - Press the button: recording starts.
-  - Ask a question in the microphone.
-  - Release the button: recording stops.
-  - The Google Assistant answer should playback on the speaker.
-
-License
--------
+## License
 
 Copyright 2017 The Android Open Source Project, Inc.
 
