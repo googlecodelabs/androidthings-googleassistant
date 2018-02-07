@@ -53,7 +53,10 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
     private static final String TAG = AssistantActivity.class.getSimpleName();
@@ -148,6 +151,38 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                                     Log.w(TAG, "error toggling LED:", e);
                                 }
                             }
+                        }
+                    }
+                    if (value.getDeviceAction() != null &&
+                            !value.getDeviceAction().getDeviceRequestJson().isEmpty()) {
+                        // Iterate through JSON object
+                        try {
+                            JSONObject deviceAction =
+                                    new JSONObject(value.getDeviceAction().getDeviceRequestJson());
+                            JSONArray inputs = deviceAction.getJSONArray("inputs");
+                            for (int i = 0; i < inputs.length(); i++) {
+                                if (inputs.getJSONObject(i).getString("intent")
+                                        .equals("action.devices.EXECUTE")) {
+                                    JSONArray commands = inputs.getJSONObject(i)
+                                            .getJSONObject("payload")
+                                            .getJSONArray("commands");
+                                    for (int j = 0; j < commands.length(); j++) {
+                                        JSONArray execution = commands.getJSONObject(j)
+                                                .getJSONArray("execution");
+                                        for (int k = 0; k < execution.length(); k++) {
+                                            String command = execution.getJSONObject(k)
+                                                    .getString("command");
+                                            JSONObject params = execution.getJSONObject(k)
+                                                    .optJSONObject("params");
+                                            if (command.equals("action.devices.traits.OnOff")) {
+                                                mLed.setValue(params.getBoolean("on"));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (JSONException | IOException e) {
+                            e.printStackTrace();
                         }
                     }
                 }
