@@ -61,8 +61,8 @@ protobuf {
 }
 
 dependencies {
-    compileOnly 'com.google.android.things:androidthings:0.6.1-devpreview'
-    api 'com.google.android.things.contrib:driver-voicehat:0.6'
+    api 'com.google.android.things:androidthings:+'
+    api 'com.google.android.things.contrib:driver-voicehat:+'
 
     api 'io.grpc:grpc-okhttp:1.2.0'
     api 'io.grpc:grpc-protobuf-lite:1.2.0'

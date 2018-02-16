@@ -42,5 +42,4 @@ android {
 
 dependencies {
     implementation project(':shared')
-    compileOnly 'com.google.android.things:androidthings:0.6.1-devpreview'
 }
