@@ -42,6 +42,7 @@ import com.google.assistant.embedded.v1alpha2.AssistRequest;
 import com.google.assistant.embedded.v1alpha2.AssistResponse;
 import com.google.assistant.embedded.v1alpha2.AudioInConfig;
 import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
+import com.google.assistant.embedded.v1alpha2.DialogStateIn;
 import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
 import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
 import com.google.protobuf.ByteString;
@@ -118,6 +119,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                         mMainHandler.post(() -> mAssistantRequestsAdapter.add(spokenRequestText));
                     }
                 }
+            }
+            if (value.getDialogStateOut() != null) {
+                mConversationState = value.getDialogStateOut().getConversationState();
             }
             if (value.getAudioOut() != null) {
                 final ByteBuffer audioData =
@@ -198,6 +202,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Max98357A mDac;
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
+    private ByteString mConversationState = null;
     private HandlerThread mAssistantThread;
     private Handler mAssistantHandler;
     private ArrayList<ByteBuffer> mAssistantResponses = new ArrayList<>();
@@ -210,6 +215,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             AssistConfig.Builder converseConfigBuilder = AssistConfig.newBuilder()
                     .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
                     .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
+            if (mConversationState != null) {
+                converseConfigBuilder.setDialogStateIn(DialogStateIn.newBuilder()
+                        .setConversationState(mConversationState)
+                        .build());
+            }
             mAssistantRequestObserver.onNext(
                     AssistRequest.newBuilder()
                             .setConfig(converseConfigBuilder.build())
