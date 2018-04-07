@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, The Android Open Source Project
+ * Copyright 2018, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,11 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.MediaRecorder.AudioSource;
+import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -44,9 +45,7 @@ import com.google.assistant.embedded.v1alpha2.AssistResponse;
 import com.google.assistant.embedded.v1alpha2.AudioInConfig;
 import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
 import com.google.assistant.embedded.v1alpha2.DeviceConfig;
-import com.google.assistant.embedded.v1alpha2.DeviceConfig.Builder;
 import com.google.assistant.embedded.v1alpha2.DialogStateIn;
-import com.google.assistant.embedded.v1alpha2.DialogStateInOrBuilder;
 import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
 import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
 import com.google.protobuf.ByteString;
@@ -57,7 +56,9 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
     private static final String TAG = AssistantActivity.class.getSimpleName();
@@ -68,18 +69,21 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
     // Audio constants.
     private static final int SAMPLE_RATE = 16000;
+    private static final int DEFAULT_VOLUME = 100;
+    private static int mVolumePercentage = 100;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
     private static final AudioInConfig ASSISTANT_AUDIO_REQUEST_CONFIG =
             AudioInConfig.newBuilder()
-                         .setEncoding(ENCODING_INPUT)
-                         .setSampleRateHertz(SAMPLE_RATE)
-                         .build();
+                    .setEncoding(ENCODING_INPUT)
+                    .setSampleRateHertz(SAMPLE_RATE)
+                    .build();
     private static final AudioOutConfig ASSISTANT_AUDIO_RESPONSE_CONFIG =
             AudioOutConfig.newBuilder()
                     .setEncoding(ENCODING_OUTPUT)
                     .setSampleRateHertz(SAMPLE_RATE)
+                    .setVolumePercentage(mVolumePercentage)
                     .build();
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
@@ -110,37 +114,89 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private StreamObserver<AssistRequest> mAssistantRequestObserver;
     private StreamObserver<AssistResponse> mAssistantResponseObserver =
             new StreamObserver<AssistResponse>() {
-        @Override
-        public void onNext(AssistResponse value) {
-            if (value.getEventType() != null) {
-                Log.d(TAG, "converse response event: " + value.getEventType());
-            }
-            if (value.getSpeechResultsList() != null && value.getSpeechResultsList().size() > 0) {
-                for (SpeechRecognitionResult result : value.getSpeechResultsList()) {
-                    final String spokenRequestText = result.getTranscript();
-                    if (!spokenRequestText.isEmpty()) {
-                        Log.i(TAG, "assistant request text: " + spokenRequestText);
-                        mMainHandler.post(() -> mAssistantRequestsAdapter.add(spokenRequestText));
+                @Override
+                public void onNext(AssistResponse value) {
+                    if (value.getEventType() != null) {
+                        Log.d(TAG, "converse response event: " + value.getEventType());
+                    }
+                    if (value.getSpeechResultsList() != null && value.getSpeechResultsList().size() > 0) {
+                        for (SpeechRecognitionResult result : value.getSpeechResultsList()) {
+                            final String spokenRequestText = result.getTranscript();
+                            if (!spokenRequestText.isEmpty()) {
+                                Log.i(TAG, "assistant request text: " + spokenRequestText);
+                                mMainHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mAssistantRequestsAdapter.add(spokenRequestText);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    if (value.getDialogStateOut() != null) {
+                        int volume = value.getDialogStateOut().getVolumePercentage();
+                        if (volume > 0) {
+                            mVolumePercentage = volume;
+                            Log.i(TAG, "assistant volume changed: " + mVolumePercentage);
+                            mAudioTrack.setVolume(AudioTrack.getMaxVolume() *
+                                mVolumePercentage / 100.0f);
+                        }
+                        mConversationState = value.getDialogStateOut().getConversationState();
+                    }
+                    if (value.getAudioOut() != null) {
+                        final ByteBuffer audioData =
+                            ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
+
+                        Log.d(TAG, "converse audio size: " + audioData.remaining());
+
+                        if (mLed != null) {
+                            try {
+                                mLed.setValue(!mLed.getValue());
+                            } catch (IOException e) {
+                                Log.w(TAG, "error toggling LED:", e);
+                            }
+                            Log.d(TAG, "converse audio size: " + audioData.remaining());
+                            mAssistantResponses.add(audioData);
+                            if (mLed != null) {
+                                try {
+                                    mLed.setValue(!mLed.getValue());
+                                } catch (IOException e) {
+                                    Log.w(TAG, "error toggling LED:", e);
+                                }
+                            }
+                        }
+                    }
+                    if (value.getDeviceAction() != null &&
+                            !value.getDeviceAction().getDeviceRequestJson().isEmpty()) {
+                        // Iterate through JSON object
+                        try {
+                            JSONObject deviceAction =
+                                    new JSONObject(value.getDeviceAction().getDeviceRequestJson());
+                            JSONArray inputs = deviceAction.getJSONArray("inputs");
+                            for (int i = 0; i < inputs.length(); i++) {
+                                if (inputs.getJSONObject(i).getString("intent")
+                                        .equals("action.devices.EXECUTE")) {
+                                    JSONArray commands = inputs.getJSONObject(i)
+                                            .getJSONObject("payload")
+                                            .getJSONArray("commands");
+                                    for (int j = 0; j < commands.length(); j++) {
+                                        JSONArray execution = commands.getJSONObject(j)
+                                                .getJSONArray("execution");
+                                        for (int k = 0; k < execution.length(); k++) {
+                                            String command = execution.getJSONObject(k)
+                                                    .getString("command");
+                                            JSONObject params = execution.getJSONObject(k)
+                                                    .optJSONObject("params");
+                                            handleDeviceAction(command, params);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (JSONException | IOException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
-            }
-            if (value.getDialogStateOut() != null) {
-                mConversationState = value.getDialogStateOut().getConversationState();
-            }
-            if (value.getAudioOut() != null) {
-                final ByteBuffer audioData =
-                    ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
-                Log.d(TAG, "converse audio size: " + audioData.remaining());
-                mAssistantResponses.add(audioData);
-                if (mLed != null) {
-                    try {
-                        mLed.setValue(!mLed.getValue());
-                    } catch (IOException e) {
-                        Log.w(TAG, "error toggling LED:", e);
-                    }
-                }
-            }
-        }
 
         @Override
         public void onError(Throwable t) {
@@ -177,10 +233,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 try {
                     mDac.setSdMode(Max98357A.SD_MODE_SHUTDOWN);
                 } catch (IOException e) {
-                    Log.e(TAG, "unable to modify dac trigger", e);
+                    Log.e(TAG, "unable to modify gpio peripherals", e);
                 }
             }
-
             Log.i(TAG, "assistant response finished");
             if (mLed != null) {
                 try {
@@ -204,6 +259,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Button mButton;
     private Gpio mLed;
     private Max98357A mDac;
+    private Handler mLedHandler = new Handler(Looper.getMainLooper());
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
     private ByteString mConversationState = null;
@@ -230,9 +286,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             converseConfigBuilder.setDialogStateIn(dialogStateInBuilder.build());
             mAssistantRequestObserver.onNext(
-                    AssistRequest.newBuilder()
-                            .setConfig(converseConfigBuilder.build())
-                            .build());
+                AssistRequest.newBuilder()
+                    .setConfig(converseConfigBuilder.build())
+                    .build());
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
@@ -296,12 +352,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         if (USE_VOICEHAT_DAC) {
             Log.d(TAG, "enumerating devices");
             mAudioInputDevice = findAudioDevice(AudioManager.GET_DEVICES_INPUTS,
-                AudioDeviceInfo.TYPE_BUS);
+                    AudioDeviceInfo.TYPE_BUS);
             if (mAudioInputDevice == null) {
                 Log.e(TAG, "failed to found preferred audio input device, using default");
             }
             mAudioOutputDevice = findAudioDevice(AudioManager.GET_DEVICES_OUTPUTS,
-                AudioDeviceInfo.TYPE_BUS);
+                    AudioDeviceInfo.TYPE_BUS);
             if (mAudioOutputDevice == null) {
                 Log.e(TAG, "failed to found preferred audio output device, using default");
             }
@@ -347,7 +403,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 AUDIO_FORMAT_STEREO.getChannelMask(),
                 AUDIO_FORMAT_STEREO.getEncoding());
         mAudioRecord = new AudioRecord.Builder()
-                .setAudioSource(AudioSource.VOICE_RECOGNITION)
+                .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
                 .setBufferSizeInBytes(inputBufferSize)
                 .build();
@@ -387,6 +443,38 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAssistantHandler.post(mStartAssistantRequest);
         } else {
             mAssistantHandler.post(mStopAssistantRequest);
+        }
+    }
+
+    public void handleDeviceAction(String command, JSONObject params)
+            throws JSONException, IOException {
+        mLedHandler.removeCallbacksAndMessages(null);
+        if (command.equals("action.devices.traits.OnOff")) {
+            mLedHandler.post(() -> {
+                try {
+                    mLed.setValue(params.getBoolean("on"));
+                } catch (IOException | JSONException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } else if (command.equals("com.example.commands.BlinkLight")) {
+            int delay = 1000;
+            int blinkCount = params.getInt("number");
+            String speed = params.getString("speed");
+            if (speed.equals("slowly")) {
+                delay = 2000;
+            } else if (speed.equals("quickly")) {
+                delay = 500;
+            }
+            for (int i = 0; i < blinkCount * 2; i++) {
+                mLedHandler.postDelayed(() -> {
+                    try {
+                        mLed.setValue(!mLed.getValue());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }, i * delay);
+            }
         }
     }
 

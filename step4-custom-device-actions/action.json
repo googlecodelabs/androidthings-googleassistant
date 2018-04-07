@@ -1,0 +1,89 @@
+{
+  "manifest": {
+    "displayName": "Blinky light",
+    "invocationName": "Blinky light",
+    "category": "PRODUCTIVITY"
+  },
+  "actions": [
+    {
+      "name": "com.example.actions.BlinkLight",
+      "availability": {
+        "deviceClasses": [
+          {
+            "assistantSdkDevice": {}
+          }
+        ]
+      },
+      "intent": {
+        "name": "com.example.intents.BlinkLight",
+        "parameters": [
+          {
+            "name": "number",
+            "type": "SchemaOrg_Number"
+          },
+          {
+            "name": "speed",
+            "type": "Speed"
+          }
+        ],
+        "trigger": {
+          "queryPatterns": [
+            "blink $Speed:speed $SchemaOrg_Number:number times",
+            "blink $SchemaOrg_Number:number times $Speed:speed"
+          ]
+        }
+      },
+      "fulfillment": {
+        "staticFulfillment": {
+          "templatedResponse": {
+            "items": [
+              {
+                "simpleResponse": {
+                  "textToSpeech": "Blinking $number times"
+                }
+              },
+              {
+                "deviceExecution": {
+                  "command": "com.example.commands.BlinkLight",
+                  "params": {
+                    "speed": "$speed",
+                    "number": "$number"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "$Speed",
+      "entities": [
+        {
+          "key": "slowly",
+          "synonyms": [
+            "slowly",
+            "slow"
+          ]
+        },
+        {
+          "key": "normally",
+          "synonyms": [
+            "normally",
+            "regular"
+          ]
+        },
+        {
+          "key": "quickly",
+          "synonyms": [
+            "quickly",
+            "fast",
+            "quick"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -32,16 +32,18 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
+import com.example.androidthings.assistant.shared.MyDevice;
 import com.google.android.things.contrib.driver.button.Button;
 import com.google.android.things.contrib.driver.voicehat.Max98357A;
 import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
-import com.google.android.things.pio.PeripheralManagerService;
+import com.google.android.things.pio.PeripheralManager;
 import com.google.assistant.embedded.v1alpha2.AssistConfig;
 import com.google.assistant.embedded.v1alpha2.AssistRequest;
 import com.google.assistant.embedded.v1alpha2.AssistResponse;
 import com.google.assistant.embedded.v1alpha2.AudioInConfig;
 import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
+import com.google.assistant.embedded.v1alpha2.DeviceConfig;
 import com.google.assistant.embedded.v1alpha2.DialogStateIn;
 import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
 import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
@@ -227,12 +229,17 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAssistantRequestObserver = mAssistantService.assist(mAssistantResponseObserver);
             AssistConfig.Builder converseConfigBuilder = AssistConfig.newBuilder()
                     .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
-                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG);
+                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG)
+                    .setDeviceConfig(DeviceConfig.newBuilder()
+                            .setDeviceModelId(MyDevice.MODEL_ID)
+                            .setDeviceId(MyDevice.INSTANCE_ID)
+                            .build());
+            DialogStateIn.Builder dialogStateInBuilder = DialogStateIn.newBuilder()
+                    .setLanguageCode(MyDevice.LANGUAGE_CODE);
             if (mConversationState != null) {
-                converseConfigBuilder.setDialogStateIn(DialogStateIn.newBuilder()
-                        .setConversationState(mConversationState)
-                        .build());
+                dialogStateInBuilder.setConversationState(mConversationState);
             }
+            converseConfigBuilder.setDialogStateIn(dialogStateInBuilder.build());
             mAssistantRequestObserver.onNext(
                     AssistRequest.newBuilder()
                             .setConfig(converseConfigBuilder.build())
@@ -320,10 +327,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mButton = VoiceHat.openButton();
                 mLed = VoiceHat.openLed();
             } else {
-                PeripheralManagerService pioService = new PeripheralManagerService();
                 mButton = new Button(BoardDefaults.getGPIOForButton(),
                     Button.LogicState.PRESSED_WHEN_LOW);
-                mLed = pioService.openGpio(BoardDefaults.getGPIOForLED());
+                mLed = PeripheralManager.getInstance().openGpio(BoardDefaults.getGPIOForLED());
             }
 
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);

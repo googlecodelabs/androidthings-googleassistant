@@ -32,16 +32,18 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import com.example.androidthings.assistant.shared.BoardDefaults;
 import com.example.androidthings.assistant.shared.Credentials;
+import com.example.androidthings.assistant.shared.MyDevice;
 import com.google.android.things.contrib.driver.button.Button;
 import com.google.android.things.contrib.driver.voicehat.Max98357A;
 import com.google.android.things.contrib.driver.voicehat.VoiceHat;
 import com.google.android.things.pio.Gpio;
-import com.google.android.things.pio.PeripheralManagerService;
+import com.google.android.things.pio.PeripheralManager;
 import com.google.assistant.embedded.v1alpha2.AssistConfig;
 import com.google.assistant.embedded.v1alpha2.AssistRequest;
 import com.google.assistant.embedded.v1alpha2.AssistResponse;
 import com.google.assistant.embedded.v1alpha2.AudioInConfig;
 import com.google.assistant.embedded.v1alpha2.AudioOutConfig;
+import com.google.assistant.embedded.v1alpha2.DeviceConfig;
 import com.google.assistant.embedded.v1alpha2.DialogStateIn;
 import com.google.assistant.embedded.v1alpha2.EmbeddedAssistantGrpc;
 import com.google.assistant.embedded.v1alpha2.SpeechRecognitionResult;
@@ -53,7 +55,6 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -68,10 +69,21 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // Audio constants.
     private static final int SAMPLE_RATE = 16000;
     private static final int DEFAULT_VOLUME = 100;
+    private static int mVolumePercentage = 100;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
-
+    private static final AudioInConfig ASSISTANT_AUDIO_REQUEST_CONFIG =
+            AudioInConfig.newBuilder()
+                    .setEncoding(ENCODING_INPUT)
+                    .setSampleRateHertz(SAMPLE_RATE)
+                    .build();
+    private static final AudioOutConfig ASSISTANT_AUDIO_RESPONSE_CONFIG =
+            AudioOutConfig.newBuilder()
+                    .setEncoding(ENCODING_OUTPUT)
+                    .setSampleRateHertz(SAMPLE_RATE)
+                    .setVolumePercentage(mVolumePercentage)
+                    .build();
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
             .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
@@ -174,9 +186,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                                                     .getString("command");
                                             JSONObject params = execution.getJSONObject(k)
                                                     .optJSONObject("params");
-                                            if (command.equals("action.devices.traits.OnOff")) {
-                                                mLed.setValue(params.getBoolean("on"));
-                                            }
+                                            handleDeviceAction(command, params);
                                         }
                                     }
                                 }
@@ -239,7 +249,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // Audio playback and recording objects.
     private AudioTrack mAudioTrack;
     private AudioRecord mAudioRecord;
-    private int mVolumePercentage = DEFAULT_VOLUME;
 
     // Audio routing configuration: use default routing.
     private AudioDeviceInfo mAudioInputDevice;
@@ -262,20 +271,18 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAudioRecord.startRecording();
             mAssistantRequestObserver = mAssistantService.assist(mAssistantResponseObserver);
             AssistConfig.Builder converseConfigBuilder = AssistConfig.newBuilder()
-                    .setAudioInConfig(AudioInConfig.newBuilder()
-                            .setEncoding(ENCODING_INPUT)
-                            .setSampleRateHertz(SAMPLE_RATE)
-                            .build())
-                    .setAudioOutConfig(AudioOutConfig.newBuilder()
-                            .setEncoding(ENCODING_OUTPUT)
-                            .setSampleRateHertz(SAMPLE_RATE)
-                            .setVolumePercentage(mVolumePercentage)
+                    .setAudioInConfig(ASSISTANT_AUDIO_REQUEST_CONFIG)
+                    .setAudioOutConfig(ASSISTANT_AUDIO_RESPONSE_CONFIG)
+                    .setDeviceConfig(DeviceConfig.newBuilder()
+                            .setDeviceModelId(MyDevice.MODEL_ID)
+                            .setDeviceId(MyDevice.INSTANCE_ID)
                             .build());
+            DialogStateIn.Builder dialogStateInBuilder = DialogStateIn.newBuilder()
+                    .setLanguageCode(MyDevice.LANGUAGE_CODE);
             if (mConversationState != null) {
-                converseConfigBuilder.setDialogStateIn(DialogStateIn.newBuilder()
-                        .setConversationState(mConversationState)
-                        .build());
+                dialogStateInBuilder.setConversationState(mConversationState);
             }
+            converseConfigBuilder.setDialogStateIn(dialogStateInBuilder.build());
             mAssistantRequestObserver.onNext(
                 AssistRequest.newBuilder()
                     .setConfig(converseConfigBuilder.build())
@@ -363,10 +370,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mButton = VoiceHat.openButton();
                 mLed = VoiceHat.openLed();
             } else {
-                PeripheralManagerService pioService = new PeripheralManagerService();
                 mButton = new Button(BoardDefaults.getGPIOForButton(),
                     Button.LogicState.PRESSED_WHEN_LOW);
-                mLed = pioService.openGpio(BoardDefaults.getGPIOForLED());
+                mLed = PeripheralManager.getInstance().openGpio(BoardDefaults.getGPIOForLED());
             }
 
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);
@@ -435,6 +441,13 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAssistantHandler.post(mStartAssistantRequest);
         } else {
             mAssistantHandler.post(mStopAssistantRequest);
+        }
+    }
+
+    public void handleDeviceAction(String command, JSONObject params)
+            throws JSONException, IOException {
+        if (command.equals("action.devices.traits.OnOff")) {
+            mLed.setValue(params.getBoolean("on"));
         }
     }
 

@@ -14,4 +14,10 @@
  * limitations under the License.
  */
 
-include ':step1-start-here', ':step2-volume-control', ':step3-builtin-device-actions', ':shared', ':step4-custom-device-actions'
+package com.example.androidthings.assistant.shared;
+
+public class MyDevice {
+    public static final String MODEL_ID = "model_id";
+    public static final String INSTANCE_ID = "instance_id";
+    public static final String LANGUAGE_CODE = "en-US";
+}
