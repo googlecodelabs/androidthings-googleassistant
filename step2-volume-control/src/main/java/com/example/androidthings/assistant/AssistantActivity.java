@@ -292,6 +292,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         Log.i(TAG, "starting assistant demo");
 
         setContentView(R.layout.activity_main);
+
+        AudioManager am = getSystemService(AudioManager.class);
+        int maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
+
         ListView assistantRequestsListView = findViewById(R.id.assistantRequestsListView);
         mAssistantRequestsAdapter =
                 new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
