@@ -132,13 +132,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     ByteBuffer.wrap(value.getAudioOut().getAudioData().toByteArray());
                 Log.d(TAG, "converse audio size: " + audioData.remaining());
                 mAssistantResponses.add(audioData);
-                if (mLed != null) {
-                    try {
-                        mLed.setValue(!mLed.getValue());
-                    } catch (IOException e) {
-                        Log.w(TAG, "error toggling LED:", e);
-                    }
-                }
             }
         }
 
